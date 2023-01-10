@@ -3,20 +3,33 @@ import sys
 import datetime
 import pygame
 
+pygame.mixer.pre_init(44100, -16, 2, 512)
+pygame.mixer.init()
 pygame.init()
 
 clock = pygame.time.Clock()
 FPS = 60
 
-screen_width = 1000
+screen_width = 1800
 screen_height = 1000
 tile_width = tile_height = 50
 game_over = 0
-menu = True
 level_num = 1
+score = 0
+menu = True
+
+font = pygame.font.SysFont('IMPACT', 30)
+font_2 = pygame.font.SysFont('IMPACT', 50)
+
+golden = (255, 223, 0)
 
 screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption('Platformer')
+
+
+def show_text(text, font, text_col, x, y):
+    img = font.render(text, True, text_col)
+    screen.blit(img, (x, y))
 
 
 def load_level(filename):
@@ -56,6 +69,13 @@ def load_image(name, colorkey=None):
     return image
 
 
+def start_coords(date, screen_h, screen_w, tile_h, tile_w):
+    for row in date:
+        for tile in row:
+            if tile == -1:
+                return (screen_h // 2 - (date.index(row)) * 25), screen_w // 2 - (row.index(-1) * 25)
+
+
 class Button():
     def __init__(self, x, y, image):
         self.image = image
@@ -88,12 +108,19 @@ class Player():
         self.images_right = []
         self.images_left = []
         self.images_death = []
+        self.attack_right = []
+        self.attack_left = []
+        self.sp = []
+        self.attack_index = 0
+        self.attack_cooldown = 0
+        self.pressed_mouse = []
         self.index = 0
         self.counter = 0
+        self.healf = 3
         self.flag = True
-        self.sp = []
         self.jumped = False
         self.second_jump = True
+        self.attack_flag = False
 
         for num in range(9):
             img_right = load_image(f'{num}.png')
@@ -101,32 +128,46 @@ class Player():
             img_left = pygame.transform.flip(img_right, True, False)
             self.images_left.append(img_left)
             self.images_right.append(img_right)
+
         for num in range(1, 7):
             img = load_image(f'dead_{num}.png')
             img = pygame.transform.scale(img, (72 * 1.15, 86 * 1.15))
             self.images_death.append(img)
 
+        for num in range(1, 5):
+            img = load_image(f'at_{num}.png')
+            img_right = pygame.transform.scale(img, (72 * 1.15, 86 * 1.15))
+            img_left = pygame.transform.flip(img_right, True, False)
+            self.attack_left.append(img_left)
+            self.attack_right.append(img_right)
+
         self.image = self.images_right[self.index]
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
-        self.player_rect = pygame.Rect(self.rect[0], self.rect[1], self.rect[2], self.rect[3])
         self.vel_y = 0
+        self.vel_x = 0
 
         self.direction = 0
+
+        self.hit_cooldown = 0
 
     def update(self, game_over):
         dx = 0
         dy = 0
         walk_cooldown = 5
+        self.player_rect = pygame.Rect(self.rect[0] + 23, self.rect[1] + 21, 30, 78)
 
         if game_over == 0:
             key = pygame.key.get_pressed()
             if key[pygame.K_SPACE] and not self.jumped and not self.second_jump:
+                jump_sound.play()
                 self.vel_y = -17
                 self.jumped = True
             if not key[pygame.K_SPACE]:
                 self.jumped = False
+            if key[pygame.K_r]:
+                print(player.rect)
             if key[pygame.K_a]:
                 self.counter += 1
                 dx -= 3
@@ -143,6 +184,46 @@ class Player():
                 elif self.direction == -1:
                     self.image = self.images_left[self.index]
 
+            if pygame.mouse.get_pressed()[0] and self.attack_flag == False:
+                self.attack_flag = True
+
+            if self.attack_flag and (not (pygame.mouse.get_pressed()[0])):
+
+                self.attack_cooldown += 1
+                if self.attack_cooldown == 5:
+                    self.attack_index += 1
+                elif self.attack_cooldown > 5:
+                    self.attack_cooldown = 0
+                if self.attack_index < 4:
+                    if pygame.mouse.get_pos()[0] >= self.player_rect[0]:
+                        self.image = self.attack_right[self.attack_index]
+                        if self.attack_index >= 2:
+                            attack_rect = pygame.Rect(self.player_rect[0], self.player_rect[1],
+                                                      self.player_rect[2] + 65,
+                                                      self.player_rect[3])
+                        self.direction = 1
+                    else:
+                        self.image = self.attack_left[self.attack_index]
+                        if self.attack_index >= 2:
+                            attack_rect = pygame.Rect(self.player_rect[0] - 65, self.player_rect[1],
+                                                      self.player_rect[2] + 65,
+                                                      self.player_rect[3])
+                        self.direction = -1
+                    if self.attack_index >= 2:
+                        for enemy in enemy_group:
+                            enemy_rect = pygame.Rect(enemy.rect[0] + 25, enemy.rect[1], enemy.rect[2] - 35,
+                                                     enemy.rect[3])
+                            if attack_rect.colliderect(enemy_rect):
+                                death_sound.play()
+                                enemy.kill()
+                else:
+                    self.attack_index = 0
+                    self.attack_flag = False
+                    if self.direction == 1:
+                        self.image = self.images_right[self.index]
+                    elif self.direction == -1:
+                        self.image = self.images_left[self.index]
+
             if self.counter > walk_cooldown:
                 self.counter = 0
                 self.index += 1
@@ -153,14 +234,18 @@ class Player():
                 elif self.direction == -1:
                     self.image = self.images_left[self.index]
 
-            # gravity
+            if self.vel_x < 0:
+                self.vel_x += 1
+            elif self.vel_x > 0:
+                self.vel_x -= 1
+
             self.vel_y += 1
             if self.vel_y > 10:
                 self.vel_y = 10
-            dy += self.vel_y
 
-            # check for collision
-            self.player_rect = pygame.Rect(self.rect[0] + 23, self.rect[1] + 21, 30, 78)
+            dy += self.vel_y
+            dx += self.vel_x
+
             self.second_jump = True
 
             for tile in world.tile_list:
@@ -177,19 +262,33 @@ class Player():
                         self.vel_y = 0
                         self.second_jump = False
 
+            if self.hit_cooldown > 0:
+                self.hit_cooldown -= 1
+
             for enemy in enemy_group:
                 enemy_rect = pygame.Rect(enemy.rect[0] + 25, enemy.rect[1], enemy.rect[2] - 35, enemy.rect[3])
-
                 if self.player_rect.colliderect(enemy_rect):
-                    game_over = -1
+                    if self.hit_cooldown == 0:
+                        if enemy_rect[0] >= self.player_rect[0]:
+                            self.vel_x -= 12
+                        else:
+                            self.vel_x += 12
+                        self.vel_y -= 10
+                        self.healf -= 1
+                        self.hit_cooldown = 50
+                        death_sound.play()
                     break
 
             for spike in spike_group:
                 spike_rect = pygame.Rect(spike.rect[0], spike.rect[1] + 20, spike.rect[2], spike.rect[3] - 20)
 
                 if self.player_rect.colliderect(spike_rect):
-                    game_over = -1
+                    death_sound.play()
+                    self.healf -= 3
                     break
+
+            if self.healf == 0:
+                game_over = -1
 
             for portal in portal_group:
                 portal_rect = (portal.rect[0] + 10, portal.rect[1] + 20, portal.rect[2] - 20, portal.rect[3] - 20)
@@ -215,7 +314,7 @@ class Player():
                     self.rect.y += 5
 
         screen.blit(self.image, self.rect)
-        return game_over
+        return game_over, self.healf
 
 
 class Enemy(pygame.sprite.Sprite):
@@ -228,6 +327,9 @@ class Enemy(pygame.sprite.Sprite):
         self.move_direction = 1
         self.move_counter = 0
 
+    def hit(self):
+        print('1')
+
     def update(self):
         self.move_counter += 1
         self.rect.x += self.move_direction
@@ -235,6 +337,14 @@ class Enemy(pygame.sprite.Sprite):
             self.move_direction *= -1
             self.move_counter *= -1
             self.image = pygame.transform.flip(self.image, True, False)
+
+
+class Money(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.transform.scale(load_image('coin.png'), (tile_width // 2, tile_height // 2))
+        self.rect = self.image.get_rect()
+        self.rect.center = (x, y)
 
 
 class Spike(pygame.sprite.Sprite):
@@ -260,6 +370,16 @@ class World():
         self.tile_list = []
         dirt_image = load_image('dirt.png')
         grass_image = load_image('dirt_grass.png')
+        tile3_image = load_image('tile3.png')
+        tile2_image = load_image('tile2.png')
+        bookshelf_image = load_image('bookshelf.png')
+        candle_image = load_image('candle.png')
+        lamp_image = load_image('lamp.png')
+        tree1 = load_image('tree1.png')
+        tree2 = load_image('tree2.png')
+        tree3 = load_image('tree3.png')
+        bush_image = load_image('bush.png')
+        mushroom_image = load_image('mushroom.png')
         row_count = 0
         for row in date:
             col_count = 0
@@ -282,14 +402,102 @@ class World():
                     elif tile == 3:
                         skeleton = Enemy(col_count * tile_height, row_count * tile_width - 25)
                         enemy_group.add(skeleton)
-
                     elif tile == 4:
                         spike = Spike(col_count * tile_height, row_count * tile_width)
                         spike_group.add(spike)
-
+                    elif int(tile) == 5:
+                        img = pygame.transform.scale(bookshelf_image, (tile_width * 1, tile_height * 1.5))
+                        img_rect = img.get_rect()
+                        img_rect.x = col_count * tile_width
+                        img_rect.y = row_count * tile_height - 25
+                        img_rect.width = 0
+                        img_rect.height = 0
+                        tile = (img, img_rect)
+                        self.tile_list.append(tile)
+                    elif int(tile) == 6:
+                        img = pygame.transform.scale(candle_image, (tile_width, tile_height))
+                        img_rect = img.get_rect()
+                        img_rect.x = col_count * tile_width
+                        img_rect.y = row_count * tile_height
+                        img_rect.width = 0
+                        img_rect.height = 0
+                        tile = (img, img_rect)
+                        self.tile_list.append(tile)
+                    elif int(tile) == 7:
+                        img = pygame.transform.scale(lamp_image, (tile_width, tile_height))
+                        img_rect = img.get_rect()
+                        img_rect.x = col_count * tile_width
+                        img_rect.y = row_count * tile_height
+                        img_rect.width = 0
+                        img_rect.height = 0
+                        tile = (img, img_rect)
+                        self.tile_list.append(tile)
+                    elif int(tile) == 8:
+                        img = pygame.transform.scale(tile2_image, (tile_width, tile_height))
+                        img_rect = img.get_rect()
+                        img_rect.x = col_count * tile_width
+                        img_rect.y = row_count * tile_height
+                        tile = (img, img_rect)
+                        self.tile_list.append(tile)
+                    elif int(tile) == 9:
+                        img = pygame.transform.scale(tile3_image, (tile_width, tile_height))
+                        img_rect = img.get_rect()
+                        img_rect.x = col_count * tile_width
+                        img_rect.y = row_count * tile_height
+                        tile = (img, img_rect)
+                        self.tile_list.append(tile)
                     elif tile == 10:
                         portal = Portal(col_count * tile_height, row_count * tile_width)
                         portal_group.add(portal)
+                    elif tile == 11:
+                        coin = Money(col_count * tile_height + (tile_height // 2),
+                                     row_count * tile_width + (tile_width // 2))
+                        Money_group.add(coin)
+                    elif int(tile) == 12:
+                        img = pygame.transform.scale(mushroom_image, (tile_width * 3, tile_height * 3))
+                        img_rect = img.get_rect()
+                        img_rect.x = col_count * tile_width - 40
+                        img_rect.y = row_count * tile_height - 100
+                        img_rect.width = 0
+                        img_rect.height = 0
+                        tile = (img, img_rect)
+                        self.tile_list.append(tile)
+                    elif int(tile) == 13:
+                        img = pygame.transform.scale(bush_image, (tile_width * 2, tile_height * 2))
+                        img_rect = img.get_rect()
+                        img_rect.x = col_count * tile_width - 50
+                        img_rect.y = row_count * tile_height - 50
+                        img_rect.width = 0
+                        img_rect.height = 0
+                        tile = (img, img_rect)
+                        self.tile_list.append(tile)
+                    elif int(tile) == 14:
+                        img = pygame.transform.scale(tree1, (tile_width * 2, tile_height * 4))
+                        img_rect = img.get_rect()
+                        img_rect.x = col_count * tile_width - 25
+                        img_rect.y = row_count * tile_height - 150
+                        img_rect.width = 0
+                        img_rect.height = 0
+                        tile = (img, img_rect)
+                        self.tile_list.append(tile)
+                    elif int(tile) == 15:
+                        img = pygame.transform.scale(tree2, (tile_width * 2, tile_height * 2.5))
+                        img_rect = img.get_rect()
+                        img_rect.x = col_count * tile_width - 25
+                        img_rect.y = row_count * tile_height - 75
+                        img_rect.width = 0
+                        img_rect.height = 0
+                        tile = (img, img_rect)
+                        self.tile_list.append(tile)
+                    elif int(tile) == 16:
+                        img = pygame.transform.scale(tree3, (tile_width * 3, tile_height * 4.5))
+                        img_rect = img.get_rect()
+                        img_rect.x = col_count * tile_width - 40
+                        img_rect.y = row_count * tile_height - 175
+                        img_rect.width = 0
+                        img_rect.height = 0
+                        tile = (img, img_rect)
+                        self.tile_list.append(tile)
 
                 col_count += 1
             row_count += 1
@@ -304,56 +512,109 @@ level = load_level(f'level{level_num}.txt')
 enemy_group = pygame.sprite.Group()
 spike_group = pygame.sprite.Group()
 portal_group = pygame.sprite.Group()
-player = Player(100, screen_height - 130)
+Money_group = pygame.sprite.Group()
+
+start_x, start_y = start_coords(level, screen_height, screen_width, tile_height, tile_width)
+player = Player(start_x, start_y)
 
 world = World(level)
 
-fon = pygame.transform.scale(load_image('fon.png'), (screen_width, screen_height))
+fon = pygame.transform.scale(load_image('forest.png'), (screen_width, screen_height))
 restart_img = load_image('restart.png')
 start_img = load_image('start.png')
 exit_img = load_image('exit.png')
 
+HP_3 = load_image('Hp3.png')
+HP_2 = load_image('Hp2.png')
+HP_1 = load_image('Hp1.png')
+HP_0 = load_image('Hp0.png')
+
+pickup_coin_sound = pygame.mixer.Sound('data/pickupCoin.wav')
+pickup_coin_sound.set_volume(0.5)
+jump_sound = pygame.mixer.Sound('data/jump.wav')
+jump_sound.set_volume(0.2)
+teleport = pygame.mixer.Sound('data/teleport.wav')
+teleport.set_volume(0.5)
+death_sound = pygame.mixer.Sound('data/hit.wav')
+death_sound.set_volume(0.5)
+pygame.mixer.music.load('data/bg_music.mp3')
+pygame.mixer.music.play(-1, 0.0, 5000)
+pygame.mixer.music.set_volume(0.5)
+
+coin_pic = Money(tile_height // 2, tile_width // 2)
+Money_group.add(coin_pic)
+
 restart_button = Button(screen_width // 2 - 100, screen_height // 2, restart_img)
 start_button = Button(screen_width // 2 - 350, screen_height // 2, start_img)
 exit_button = Button(screen_width // 2 + 150, screen_height // 2, exit_img)
+exit_button_2 = Button(screen_width // 2 - 100, screen_height // 2 + 90, exit_img)
 
 running = True
 while running:
-
     clock.tick(FPS)
-
     screen.blit(fon, (0, 0))
     if menu:
         if exit_button.draw():
             running = False
         if start_button.draw():
             menu = False
+
     else:
-        world.draw()
 
         portal_group.draw(screen)
-
-        game_over = player.update(game_over)
+        game_over, healf = player.update(game_over)
+        world.draw()
+        Money_group.draw(screen)
         if game_over == 0:
             enemy_group.update()
+            for coin in Money_group:
+                if coin.rect.colliderect(pygame.Rect(player.rect[0] + 23, player.rect[1] + 21, 30, 78)):
+                    score += 1
+                    pickup_coin_sound.play()
+                    Money_group.remove(coin)
+            show_text('X    ' + str(score), font, golden, tile_width - 10, tile_height - 43)
 
         enemy_group.draw(screen)
         spike_group.draw(screen)
 
-        if game_over == -1:
-            if restart_button.draw():
-                game_over = 0
-                player = Player(100, screen_height - 130)
+        if healf >= 3:
+            NHP = HP_3
+        elif healf == 2:
+            NHP = HP_2
+        elif healf == 1:
+            NHP = HP_1
+        else:
+            NHP = HP_0
 
-        if game_over == 1:
-            if level_num < 12:
-                level_num += 1
-                print(level)
+        screen.blit(NHP, (tile_width + 50, tile_height - 40))
+
+        if game_over == -1:
+            show_text('YOU DIED!', font_2, (200, 200, 200), screen_width // 2 - 95, screen_height // 2 - 50)
+            if restart_button.draw():
                 level = reset_level(level_num)
                 world = World(level)
                 game_over = 0
+                score = 0
+
+        if game_over == 1:
+            if level_num < 2:
+                level_num += 1
+                teleport.play()
+                level = reset_level(level_num)
+                world = World(level)
+                start_x, start_y = start_coords(level, screen_height, screen_width, tile_height, tile_width)
+                player.restart(start_x, start_y)
+                game_over = 0
             else:
-                level_num = 0
+                show_text('YOU WIN!', font_2, (50, 200, 80), screen_width // 2 - 95, screen_height // 2 - 50)
+                if exit_button_2.draw():
+                    running = False
+                if restart_button.draw():
+                    level_num = 1
+                    level = reset_level(level_num)
+                    world = World(level)
+                    score = 0
+                    game_over = 0
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
