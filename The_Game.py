@@ -14,7 +14,8 @@ screen_width = 1800
 screen_height = 1000
 tile_width = tile_height = 50
 game_over = 0
-level_num = 1
+level_num = 0
+level_col = 4
 score = 0
 menu = True
 
@@ -69,11 +70,11 @@ def load_image(name, colorkey=None):
     return image
 
 
-def start_coords(date, screen_h, screen_w, tile_h, tile_w):
+def start_coords(date):
     for row in date:
         for tile in row:
             if tile == -1:
-                return (screen_h // 2 - (date.index(row)) * 25), screen_w // 2 - (row.index(-1) * 25)
+                return row.index(-1) * 50, date.index(row) * 50
 
 
 class Button():
@@ -166,12 +167,12 @@ class Player():
                 self.jumped = True
             if not key[pygame.K_SPACE]:
                 self.jumped = False
-            if key[pygame.K_r]:
-                print(player.rect)
             if key[pygame.K_a]:
                 self.counter += 1
                 dx -= 3
                 self.direction = -1
+            if key[pygame.K_g] and pygame.mouse.get_pressed()[2]:
+                self.rect.y -= 40
             if key[pygame.K_d]:
                 self.counter += 1
                 dx += 3
@@ -216,6 +217,7 @@ class Player():
                             if attack_rect.colliderect(enemy_rect):
                                 death_sound.play()
                                 enemy.kill()
+
                 else:
                     self.attack_index = 0
                     self.attack_flag = False
@@ -266,7 +268,9 @@ class Player():
                 self.hit_cooldown -= 1
 
             for enemy in enemy_group:
-                enemy_rect = pygame.Rect(enemy.rect[0] + 25, enemy.rect[1], enemy.rect[2] - 35, enemy.rect[3])
+                enemy_rect = pygame.Rect(enemy.rect[0] + 50, enemy.rect[1] + 70, enemy.rect[2] - 35, enemy.rect[3])
+                view = pygame.Rect(enemy_rect[0] - 300, enemy_rect[1] - 130, enemy_rect[2] + 550,
+                                   enemy_rect[3] + 200)
                 if self.player_rect.colliderect(enemy_rect):
                     if self.hit_cooldown == 0:
                         if enemy_rect[0] >= self.player_rect[0]:
@@ -278,7 +282,13 @@ class Player():
                         self.hit_cooldown = 50
                         death_sound.play()
                     break
-
+                if self.player_rect.colliderect(view):
+                    if self.player_rect[0] > enemy_rect[0]:
+                        enemy.walk_right()
+                    else:
+                        enemy.walk_left()
+                else:
+                    enemy.roam()
             for spike in spike_group:
                 spike_rect = pygame.Rect(spike.rect[0], spike.rect[1] + 20, spike.rect[2], spike.rect[3] - 20)
 
@@ -322,27 +332,108 @@ class Enemy(pygame.sprite.Sprite):
         pygame.sprite.Sprite.__init__(self)
         self.image = pygame.transform.scale(load_image('skeleton.png'), (60 * 1.3, 58 * 1.3))
         self.rect = self.image.get_rect()
+
+        self.vel_y = 0
+        self.vel_x = 0
         self.rect.x = x
-        self.rect.y = y
+        self.rect.y = y - 70
         self.move_direction = 1
         self.move_counter = 0
+        self.move_counter_2 = 0
+        self.move_index = 0
+        self.move = []
+        self.flag = False
 
-    def hit(self):
-        print('1')
+        for num in range(1, 8):
+            img = load_image(f'w{num}.png')
+            img_right = pygame.transform.scale(img, (128 * 1.15, 128 * 1.15))
+            img_left = pygame.transform.flip(img_right, True, False)
+            self.move.append(img_left)
 
-    def update(self):
+    def walk_left(self):
+        self.move_counter_2 += 1
+        self.rect.x -= 2
+        if self.move_counter_2 > 5:
+            self.move_index += 1
+            self.move_counter_2 = 0
+            if self.move_index > 6:
+                self.move_index = 0
+            self.image = self.move[self.move_index]
+        self.fall('left')
+        self.jump('left')
+
+    def walk_right(self):
+        self.move_counter_2 += 1
+        self.rect.x += 2
+        if self.move_counter_2 > 5:
+            self.move_index += 1
+            self.move_counter_2 = 0
+            if self.move_index > 6:
+                self.move_index = 0
+            self.image = self.move[self.move_index]
+            self.image = pygame.transform.flip(self.image, True, False)
+        self.fall('right')
+        self.jump('right')
+
+    def fall(self, direction):
+        if direction == 'left':
+            if level[self.rect[1] // 50 + 3][((self.rect[0]) // 50) + 2] == 0:
+                self.rect.y += tile_width
+        if direction == 'right':
+            if level[self.rect[1] // 50 + 3][((self.rect[0]) // 50) + 1] == 0:
+                self.rect.y += tile_width
+
+    def jump(self, direction):
+        if direction == 'left':
+            if level[self.rect[1] // 50 + 2][(self.rect[0] // 50) + 1] in [19, 18, 17, 2, 1]:
+                self.rect.y -= tile_width
+        if direction == 'right':
+            if level[self.rect[1] // 50 + 2][(self.rect[0] // 50) + 2] in [19, 18, 17, 2, 1]:
+                self.rect.y -= tile_width
+
+    def roam(self):
+        self.move_counter_2 += 1
         self.move_counter += 1
-        self.rect.x += self.move_direction
+        if level[self.rect[1] // 50 + 2][(self.rect[0] // 50) + 1] not in [19, 18, 17, 2, 1] and \
+                level[self.rect[1] // 50 + 2][(self.rect[0] // 50) + 3] not in [19, 18, 17, 2, 1]:
+            self.rect.x += self.move_direction
+        else:
+            if level[self.rect[1] // 50 + 2][(self.rect[0] // 50) + 3] in [19, 18, 17, 2, 1]:
+                self.rect.x -= 1
+            else:
+                self.rect.x += 1
+            self.move_direction *= -1
+            if self.flag:
+                self.flag = False
+            else:
+                self.flag = True
+
+        if self.move_counter_2 > 5:
+            self.move_index += 1
+            self.move_counter_2 = 0
+            if self.move_index > 6:
+                self.move_index = 0
+            self.image = self.move[self.move_index]
+            if not self.flag:
+                self.image = pygame.transform.flip(self.image, True, False)
+
         if abs(self.move_counter) > 50:
             self.move_direction *= -1
             self.move_counter *= -1
-            self.image = pygame.transform.flip(self.image, True, False)
+            if self.flag:
+                self.flag = False
+            else:
+                self.flag = True
+        if self.move_direction == 1:
+            self.fall('right')
+        else:
+            self.fall('left')
 
 
 class Money(pygame.sprite.Sprite):
     def __init__(self, x, y):
         pygame.sprite.Sprite.__init__(self)
-        self.image = pygame.transform.scale(load_image('coin.png'), (tile_width // 2, tile_height // 2))
+        self.image = pygame.transform.scale(load_image('coin.png'), (tile_width // 1.5, tile_height // 1.5))
         self.rect = self.image.get_rect()
         self.rect.center = (x, y)
 
@@ -370,6 +461,10 @@ class World():
         self.tile_list = []
         dirt_image = load_image('dirt.png')
         grass_image = load_image('dirt_grass.png')
+        grass_top_right_image = load_image('dirt_grass_right_top.png')
+        grass_atr_image = load_image('grass_atr.png')
+        grass_tl_image = load_image('grass_tl.png')
+        grass_atl_image = load_image('grass_atl.png')
         tile3_image = load_image('tile3.png')
         tile2_image = load_image('tile2.png')
         bookshelf_image = load_image('bookshelf.png')
@@ -381,28 +476,28 @@ class World():
         bush_image = load_image('bush.png')
         mushroom_image = load_image('mushroom.png')
         row_count = 0
-        for row in date:
+        for row in range(len(date)):
             col_count = 0
-            for tile in row:
+            for tile in date[row]:
                 if tile != 0:
-                    if tile == 1:
+                    if int(tile) == 1:
                         img = pygame.transform.scale(grass_image, (tile_width, tile_height))
                         img_rect = img.get_rect()
                         img_rect.x = col_count * tile_width
                         img_rect.y = row_count * tile_height
                         tile = (img, img_rect)
                         self.tile_list.append(tile)
-                    elif tile == 2:
+                    elif int(tile) == 2:
                         img = pygame.transform.scale(dirt_image, (tile_width, tile_height))
                         img_rect = img.get_rect()
                         img_rect.x = col_count * tile_width
                         img_rect.y = row_count * tile_height
                         tile = (img, img_rect)
                         self.tile_list.append(tile)
-                    elif tile == 3:
+                    elif int(tile) == 3:
                         skeleton = Enemy(col_count * tile_height, row_count * tile_width - 25)
                         enemy_group.add(skeleton)
-                    elif tile == 4:
+                    elif int(tile) == 4:
                         spike = Spike(col_count * tile_height, row_count * tile_width)
                         spike_group.add(spike)
                     elif int(tile) == 5:
@@ -446,10 +541,10 @@ class World():
                         img_rect.y = row_count * tile_height
                         tile = (img, img_rect)
                         self.tile_list.append(tile)
-                    elif tile == 10:
+                    elif int(tile) == 10:
                         portal = Portal(col_count * tile_height, row_count * tile_width)
                         portal_group.add(portal)
-                    elif tile == 11:
+                    elif int(tile) == 11:
                         coin = Money(col_count * tile_height + (tile_height // 2),
                                      row_count * tile_width + (tile_width // 2))
                         Money_group.add(coin)
@@ -496,6 +591,34 @@ class World():
                         img_rect.y = row_count * tile_height - 175
                         img_rect.width = 0
                         img_rect.height = 0
+                        tile = (img, img_rect)
+                        self.tile_list.append(tile)
+                    elif int(tile) == 17:
+                        img = pygame.transform.scale(grass_top_right_image, (tile_width, tile_height))
+                        img_rect = img.get_rect()
+                        img_rect.x = col_count * tile_width
+                        img_rect.y = row_count * tile_height
+                        tile = (img, img_rect)
+                        self.tile_list.append(tile)
+                    elif int(tile) == 18:
+                        img = pygame.transform.scale(grass_atr_image, (tile_width, tile_height))
+                        img_rect = img.get_rect()
+                        img_rect.x = col_count * tile_width
+                        img_rect.y = row_count * tile_height
+                        tile = (img, img_rect)
+                        self.tile_list.append(tile)
+                    elif int(tile) == 19:
+                        img = pygame.transform.scale(grass_tl_image, (tile_width, tile_height))
+                        img_rect = img.get_rect()
+                        img_rect.x = col_count * tile_width
+                        img_rect.y = row_count * tile_height
+                        tile = (img, img_rect)
+                        self.tile_list.append(tile)
+                    elif int(tile) == 20:
+                        img = pygame.transform.scale(grass_atl_image, (tile_width, tile_height))
+                        img_rect = img.get_rect()
+                        img_rect.x = col_count * tile_width
+                        img_rect.y = row_count * tile_height
                         tile = (img, img_rect)
                         self.tile_list.append(tile)
 
@@ -566,7 +689,6 @@ while running:
         world.draw()
         Money_group.draw(screen)
         if game_over == 0:
-            enemy_group.update()
             for coin in Money_group:
                 if coin.rect.colliderect(pygame.Rect(player.rect[0] + 23, player.rect[1] + 21, 30, 78)):
                     score += 1
@@ -597,7 +719,7 @@ while running:
                 score = 0
 
         if game_over == 1:
-            if level_num < 2:
+            if level_num < level_col:
                 level_num += 1
                 teleport.play()
                 level = reset_level(level_num)
