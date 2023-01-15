@@ -157,6 +157,7 @@ class Player():
         dx = 0
         dy = 0
         walk_cooldown = 5
+
         self.player_rect = pygame.Rect(self.rect[0] + 23, self.rect[1] + 21, 30, 78)
 
         if game_over == 0:
@@ -171,8 +172,6 @@ class Player():
                 self.counter += 1
                 dx -= 3
                 self.direction = -1
-            if key[pygame.K_g] and pygame.mouse.get_pressed()[2]:
-                self.rect.y -= 40
             if key[pygame.K_d]:
                 self.counter += 1
                 dx += 3
@@ -637,7 +636,7 @@ spike_group = pygame.sprite.Group()
 portal_group = pygame.sprite.Group()
 Money_group = pygame.sprite.Group()
 
-start_x, start_y = start_coords(level, screen_height, screen_width, tile_height, tile_width)
+start_x, start_y = start_coords(level)
 player = Player(start_x, start_y)
 
 world = World(level)
@@ -674,6 +673,7 @@ exit_button_2 = Button(screen_width // 2 - 100, screen_height // 2 + 90, exit_im
 
 running = True
 while running:
+    sp = []
     clock.tick(FPS)
     screen.blit(fon, (0, 0))
     if menu:
@@ -681,6 +681,7 @@ while running:
             running = False
         if start_button.draw():
             menu = False
+            flag = True
 
     else:
 
@@ -712,27 +713,58 @@ while running:
 
         if game_over == -1:
             show_text('YOU DIED!', font_2, (200, 200, 200), screen_width // 2 - 95, screen_height // 2 - 50)
+            if flag:
+                if os.path.exists('data\coins.txt'):
+                    file = open('data\coins.txt', 'r')
+                    for i in file.readlines():
+                        sp.append(i)
+                    file = open('data\coins.txt', 'w')
+                    sp.append(f'Collected coins: {score}\n')
+                    file.writelines(sp)
+                    file.close()
+                else:
+                    file = open('data\coins.txt', 'w')
+                    file.write(f'Collected coins: {score}\n')
+                    file.close()
+                flag = False
             if restart_button.draw():
                 level = reset_level(level_num)
                 world = World(level)
                 game_over = 0
                 score = 0
+                flag = True
 
         if game_over == 1:
             if level_num < level_col:
-                level_num += 1
+                level_num += 2
                 teleport.play()
                 level = reset_level(level_num)
                 world = World(level)
-                start_x, start_y = start_coords(level, screen_height, screen_width, tile_height, tile_width)
+                start_x, start_y = start_coords(level)
                 player.restart(start_x, start_y)
                 game_over = 0
             else:
+                if flag:
+                    if os.path.exists('data\coins.txt'):
+                        file = open('data\coins.txt', 'r')
+                        for i in file.readlines():
+                            sp.append(i)
+                        file = open('data\coins.txt', 'w')
+                        sp.append(f'Collected coins: {score}\n')
+                        file.writelines(sp)
+                        file.close()
+                    else:
+                        file = open('data\coins.txt', 'w')
+                        file.write(f'{score}\n')
+                        file.close()
+                    flag = False
                 show_text('YOU WIN!', font_2, (50, 200, 80), screen_width // 2 - 95, screen_height // 2 - 50)
                 if exit_button_2.draw():
                     running = False
+                    flag = True
                 if restart_button.draw():
-                    level_num = 1
+                    flag = True
+                    level_num = 0
                     level = reset_level(level_num)
                     world = World(level)
                     score = 0
