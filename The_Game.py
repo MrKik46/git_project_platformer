@@ -15,7 +15,7 @@ screen_width = 1800 * screen_size_cef
 screen_height = 1000 * screen_size_cef
 tile_width = tile_height = 50 * screen_size_cef
 game_over = 0
-level_num = 4
+level_num = 0
 level_col = 5
 score = 0
 menu = True
