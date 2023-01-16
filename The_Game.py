@@ -703,9 +703,9 @@ teleport = pygame.mixer.Sound('data/teleport.wav')
 teleport.set_volume(0.5)
 death_sound = pygame.mixer.Sound('data/hit.wav')
 death_sound.set_volume(0.5)
-# pygame.mixer.music.load('data/bg_music.mp3')
-# pygame.mixer.music.play(-1, 0.0, 5000)
-# pygame.mixer.music.set_volume(0.5)
+pygame.mixer.music.load('data/bg_music.mp3')
+pygame.mixer.music.play(-1, 0.0, 5000)
+pygame.mixer.music.set_volume(0.5)
 
 coin_pic = Money(tile_height // 2, tile_width // 2)
 Money_group.add(coin_pic)
@@ -741,7 +741,7 @@ while running:
         show_text('Удачи!', font_2, (50, 200, 80),
                   screen_width // 2 - 50 * screen_size_cef,
                   screen_height // 2 + 200 * screen_size_cef)
-        show_text('P.S Остерегайтесь  лесьников', font_2, (50, 200, 80),
+        show_text('P.S Остерегайтесь  лесников', font_2, (50, 200, 80),
                   screen_width // 2 - 250 * screen_size_cef,
                   screen_height // 2 + 350 * screen_size_cef)
         if results_button.draw():
